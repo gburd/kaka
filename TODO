@@ -1,0 +1,159 @@
+Requirements for a new timeseries database (TSDB):
+ Hardware: a AWS/EC2 ic3.8xlarge (Intel Xeon E5-2680v2) based cloud server with 60GB of RAM
+ * support time series with nanosecond granularity
+ * 2 billion unique time series identified by a key (string)
+ * 1 billion data points (time stamp, value, tag set) added per minute
+ * 50 quadrillion data points per year per server
+ * ~17 million writes per second (~1B/min)
+ * support for historic as well as live streaming queries
+ * more than 50,000 queries per second at peak (per-node)
+ * 20 million reads per second, reads must succeed in ~2µ seconds (microseconds) against the low-latency pool in the p95
+ * over 1 year ability to store 2.1 trillion data points, and supporting 119M queries per second (53M inserts per second) in a four-node cluster
+ * store data for 26 hours in low-latency pool
+ * store data for ~146 years in higher-latency format with full precision or which optionally degrades precision gracefully to conserve space
+ * accelerates computation of associative statistics over arbitrary time ranges, using precomputed statistics over power-of-two-aligned time ranges
+ * 2.93x compression on disk format including the precomputed statistical records and tags
+ * at minimum two in-memory, non co-located (-affinity) replicas (for disaster recovery capacity)
+ * 100% read-available service when any node remains lively and network available to a client
+ * ability to scan over all in-memory data within the past 26hrs saturating network bandwidth or cache and scan other older time-frames as needed
+ * provides copy-on-write semantics, with versioning and efficient changeset calculation
+ * supports "distillate streams" — streams computed from one or more existing streams — that are efficiently recomputed as data changes or arrives out-of-order
+ * scales linearly in the number of nodes
+ * support for deleting data matching a query within a time range
+ * design must be able to support at least 2x growth per year
+ * data is stored with ??? format/precision and with NaN, missing/null, and is value? boolean range information (value must be within [a,b) etc.)
+ * missing data can be estimated with a confidence
+ *
+
+Akka:
+* VectorClock -> https://github.com/ricardobcl/ServerWideClocks
+* Membership -> https://github.com/lalithsuresh/rapid
+* Gossip ->
+* Failure Detector -> https://github.com/lalithsuresh/rapid
+* Consistent Hashing -> https://doc.akka.io/docs/akka/current/cluster-routing.html @slfrichie's work
+* https://doc.akka.io/docs/akka/current/multi-node-testing.html
+* https://doc.akka.io/docs/akka/current/remoting-artery.html
+
+* Timeseries
+  * https://www.youtube.com/playlist?list=PLSE8ODhjZXjY0GMWN4X8FIkYNfiu8_Wl9
+  * https://blog.acolyer.org/2016/05/04/btrdb-optimizing-storage-system-design-for-timeseries-processing/
+  * https://www.usenix.org/conference/fast16/technical-sessions/presentation/andersen
+  * http://www.vldb.org/pvldb/vol8/p1816-teller.pdf
+  * https://www.cockroachlabs.com/blog/time-travel-queries-select-witty_subtitle-the_future/
+    https://www.cockroachlabs.com/docs/stable/as-of-system-time.html
+
+https://github.com/oxlade39/STorrent - scala/akka implementation of bittorent
+https://github.com/atomashpolskiy/bittorrent - java implementation of bittorrent
+https://github.com/humio/hanoidb
+https://github.com/cb372/scalacache - scala cache API (cache2k)
+https://github.com/smacke/jaydio - direct IO
+http://probcomp.csail.mit.edu/blog/programming-and-probability-sampling-from-a-discrete-distribution-over-an-infinite-set/
+
+
+https://github.com/silt/silt https://www.cs.cmu.edu/~dga/papers/silt-sosp2011.pdf
+
+* BTrDB
+  https://news.ycombinator.com/item?id=20280135
+  https://github.com/PingThingsIO/btrdb-explained
+  https://btrdb.readthedocs.io/en/latest/explained.html
+  http://btrdb-viz-latest.surge.sh/
+  https://www.usenix.org/conference/fast16/technical-sessions/presentation/andersen
+  https://blog.acolyer.org/2016/05/04/btrdb-optimizing-storage-system-design-for-timeseries-processing/
+* Trigram Tags for Feed Forward Cuckoo/Neural/Bloom Filters
+  https://github.com/efficient/ffbf
+  https://www.cs.cmu.edu/~dga/papers/ffbf-jea2012.pdf
+  https://blog.acolyer.org/2019/07/19/meta-learning-neural-bloom-filters/
+  https://www.cs.cmu.edu/~dga/papers/cuckoo-conext2014.pdf https://brilliant.org/wiki/cuckoo-filter/ https://bdupras.github.io/filter-tutorial/
+  https://github.com/google/codesearch/blob/master/index/read.go https://github.com/google/codesearch/blob/master/index/write.go
+  rolling hash
+  chunk data in blocks defined by a 50% fill-rate of the bloom filter of fixed 8KB size
+  for every bit of information we can extract from the search string we get a 50% reduction in the number of
+  chunks we need to scan
+* HyperLogLog++ for approximate counts
+  https://github.com/clarkduvall/hyperloglog
+  https://research.neustar.biz/2013/01/24/hyperloglog-googles-take-on-engineering-hll/
+* Log Linear bucketed histograms
+  merge using a tree algorithm to try to merge similar histograms (e.g. with four, merge 0-1, 2-3, then (0-1)-(2-3))
+* Value estimation, anomaly detection
+  http://probcomp.csail.mit.edu/software/bayesdb/
+  https://github.com/probcomp/bayeslite
+  https://github.com/probcomp/BayesDB https://github.com/probcomp/BayesDB/tree/6d7b9207672f39275291fd5897836a1da073fa78
+  https://news.ycombinator.com/item?id=6864339
+  https://www.youtube.com/watch?v=7_m7JCLKmTY
+  https://www.youtube.com/watch?v=Bvjj0Hagzbg
+  https://www.datainnovation.org/2013/12/5-qs-for-the-creators-of-bayesdb-a-database-built-for-data-science/
+
+* time-partitioned trees
+
+QUERY SYNTAX:
+-----------------------------------------------------------------------------------------------------------------------
+
+INFER ... WITH CONFIDENCE 0.95
+SIMULATE salary FROM employees_demo GIVEN division='sales' TIMES 100;
+
+API:
+-----------------------------------------------------------------------------------------------------------------------
+Types:
+ - AUTH
+   token representing authentication for access to the system
+ - UUID
+   unique value identifying
+ - BITMAP
+   an EWAH-compressed bitmap index indicating presents of tags for values in this stream
+ - StartTime/EndTime
+   [begin:end) - include data that matches the begin time, not end, a beging of 12:00 will only match data +1 ns after 12:00 and later
+   (begin:end) - doesn't include data that matches the start or end of the range only within
+   (begin:end] -
+   [begin:) - from time until now and ongoing as a stream
+   [:end] - from the first recorded value forward until end
+   [:] - all values recorded in all time and ongoing as a stream
+ - AsOfTime - uses system recorded time to find the next version closest to specified time, time can be in the past or
+   future in which case the stream doesn't start until the system time as known to the node servicing the query passes
+   the indicated time
+
+InsertValues(AUTH, UUID, EWAH, [(time, value)]) → boolean
+StreamValues(AUTH, UUID, starting EWAH, [(time, value, optional Δ-EWAH)]): Stream/Socket
+ Creates a new version of a stream with the given collection of (time,value) pairs inserted. Logically, the stream is
+ maintained in time order.  Most commonly, points are appended to the end of the stream, but this cannot be assumed:
+ readings from a device may be delivered to the store out of order, duplicates may occur, holes may be back-filled and
+ corrections may be made to old data. Each insertion of a collection of values creates a new version, leaving the old
+ version unmodified. This allows new analyses to be performed on old versions of the data.
+
+GetRange(AUTH, UUID, EWAH, StartTime, EndTime, Version|AsOfSystemTime) → (Version, [(time, value)])
+StreamRange(AUTH, UUID, EWAH, StartTime, EndTime, Version|AsOfSystemTime) → (Version, [(time, value)])
+  Retrieves all the data between two times (non-inclusive  in a given version of the stream. The ‘latest’ version can be indicated,
+  thereby eliminating a call toGetLatestVer-sion(UUID)→Versionto obtain the latest version for astream prior to querying a range. The exact version num-ber is returned along with the data to facilitate a repeat-able query in future
+
+Get-StatisticalRange(UUID, StartTime, EndTime, Ver-sion, Resolution)→(Version, [(Time, Min, Mean,Max, Count)])is used to retrieve statistical records be-tween two times at a given temporal resolution. Eachrecord covers 2resolutionnanoseconds. The start time andend time are on 2resolutionboundaries and result recordsare periodic in that time unit; thus summaries are alignedacross streams. Unaligned windows can also be queried,with a marginal decrease in performance.GetNearestValue(UUID, Time, Version, Direction)→(Version, (Time, Value))locates the nearest point to agiven time, either forwards or backwards. It is commonlyused to obtain the ‘current’, or most recent to now, valueof a stream of interest.
+
+ComputeDiff(UUID, FromVersion,ToVersion, Resolution)→[(StartTime, EndTime)]provides the time ranges that contain differences betweenthe given versions. The size of the changeset returnedcan be limited by limiting the number of versions be-tweenFromVersionandToVersionas each version hasa maximum size. Each returned time range will be largerthan 2resolutionnanoseconds, allowing the caller to opti-mize for batch size.
+
+As utilities
+DeleteValues(AUTH, UUID, ...
+DeleteValues(AUTH, UUID, between versions?
+DeleteValues(AUTH, UUID, with tags that match EWAH
+DeleteRange(UUID, StartTime, End-Time): create a new version of the stream with the givenrange deleted andFlush(UUID)ensure the given streamis flushed to replicated storage.
+------------------------------------------------------------------------------------------------------------------------------
+distillation pipeline
+time-partitioning copy-on-write version-annotated k-arytree
+
+To retain historic data, the tree iscopy on write: eachinsert into the tree forms an overlay on the previous treeaccessible via a new root node. Providing historic dataqueries in this way ensures that all versions of the treerequire equal effort to query – unlike log replay mech-anisms which introduce overheads proportional to howmuch data has changed or how old is the version that isbeing queried. Using the storage structure as the indexensures that queries to any version of the stream have anindex to use, and reduces network round trips.
+
+The compression enginecom-presses the min, mean, max, count, address and versionfields in internal nodes, as well as the time and valuefields in leaf nodes.  It uses a method we calldelta-deltacoding followed by Huffman coding using a fixedtree. Typical delta coding works by calculating the dif-ference between every value in the sequence and storingthat using variable-length symbols (as the delta is nor-mally smaller than the absolute values [18]). Unfortu-nately with high-precision sensor data, this process doesnot work well because nanosecond timestamps producevery large deltas, and even linearly-changing values pro-duce sequences of large, but similar, delta values. Delta-delta compression re-places run-length encoding and encodes each delta as thedifference from the mean of a window of previous deltavalues. The result is a sequence of only the jitter values.Incidentally this works well for the addresses and ver-sion numbers, as they too are linearly increasing valueswith some jitter in the deltas. In the course of system de-velopment, we found that this algorithm produces betterresults, with a simpler implementation, than the residualcoding in FLAC [13] which was the initial inspiration.
+
+GOAL:
+* segment files
+  * have a torrent file description
+  * must reach a replication level where the spread of chunks within these file is sufficient to rebuild them (erasure coding) even if 1/2 of the cluster is missing
+  * bittorrent leaching/seeding to automatically deliver files within directories to nodes
+
+* hanoidb/silt-like data storage, fast ingest merged to larger space/search efficient segment files
+* BTrDB trie
+* nanosecond resolution
+* tagged datapoints
+* computations within data
+
+
+LB -> cluster -> node -> socket with metrics data on it
+   -> data parsed, consistent hashed to nodes with similar time ranges for archival
+

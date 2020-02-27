@@ -15,7 +15,7 @@ import akka.cluster.typed.Subscribe
 object ClusterListener {
 
   sealed trait Event
-  // internal adapted cluster events only
+  // Internal adapted cluster events only.
   private final case class ReachabilityChange(reachabilityEvent: ReachabilityEvent) extends Event
   private final case class MemberChange(event: MemberEvent) extends Event
 

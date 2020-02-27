@@ -1,7 +1,10 @@
 import com.typesafe.sbt.SbtMultiJvm.multiJvmSettings
 import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 
-val akkaVersion = "2.6.0"
+//https://stackoverflow.com/a/58456468
+ThisBuild / useCoursier := false
+
+val akkaVersion = "2.6.3"
 
 lazy val `kaka` = project
   .in(file("."))
@@ -14,11 +17,14 @@ lazy val `kaka` = project
     run / javaOptions ++= Seq("-Xms128m", "-Xmx1024m", "-Djava.library.path=./target/native"),
     libraryDependencies ++= Seq(
       "com.typesafe.akka" %% "akka-actor-typed"           % akkaVersion,
+      "com.typesafe.akka" %% "akka-cluster"               % akkaVersion,
       "com.typesafe.akka" %% "akka-cluster-typed"         % akkaVersion,
+      "com.typesafe.akka" %% "akka-cluster-metrics"       % akkaVersion,
       "com.typesafe.akka" %% "akka-serialization-jackson" % akkaVersion,
       "com.typesafe.akka" %% "akka-multi-node-testkit"    % akkaVersion,
-      "ch.qos.logback"    %  "logback-classic"             % "1.2.3",
-      "org.scalatest"     %% "scalatest"                  % "3.0.8"     % Test,
+      "ch.qos.logback"    %  "logback-classic"            % "1.2.3",
+      "io.kamon"          %  "sigar-loader"               % "1.6.6-rev002",
+      "org.scalatest"     %% "scalatest"                  % "3.1.1"     % Test,
       "com.typesafe.akka" %% "akka-actor-testkit-typed"   % akkaVersion % Test),
     run / fork := false,
     Global / cancelable := false,
@@ -27,3 +33,5 @@ lazy val `kaka` = project
     licenses := Seq(("CC0", url("http://creativecommons.org/publicdomain/zero/1.0")))
   )
   .configs (MultiJvm)
+
+//dependencyUpdatesFilter -= moduleFilter(organization = "org.scala-lang")
